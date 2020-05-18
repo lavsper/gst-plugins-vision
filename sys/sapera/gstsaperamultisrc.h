@@ -29,10 +29,11 @@ struct _GstSaperaMultiSrc
   gboolean acq_started;
 
   /* Sapera objects */
-  SapAcquisition *sap_acq;
+  SapAcquisition *sap_acq[2];
+  SapBufferRoi   *sap_roi_buffers[2];
   SapBuffer      *sap_buffers;
   SapBayer       *sap_bayer;
-  SapTransfer    *sap_xfer;
+  SapTransfer    *sap_xfer[2];
   SapGstMultiProcessing*sap_pro;
 
   /* properties */

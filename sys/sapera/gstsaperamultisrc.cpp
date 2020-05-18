@@ -120,8 +120,6 @@ protected:
       }
     }
 
-    src->sap_buffers->ReleaseAddress (pData);
-
     gst_buffer_unmap (buf, &minfo);
 
     GST_DEBUG ("push_buffer => pts %" GST_TIME_FORMAT,
@@ -196,12 +194,22 @@ gst_saperamultisrc_init_objects (GstSaperaMultiSrc * src)
   GST_DEBUG_OBJECT (src, "Using config file '%s'", src->format_file);
 
   SapLocation loc (src->server_index, src->resource_index);
-  src->sap_acq = new SapAcquisition (loc, src->format_file);
+  SapLocation loc2 (src->server_index + 1, src->resource_index);
+  src->sap_acq[0] = new SapAcquisition (loc, src->format_file);
+  src->sap_acq[1] = new SapAcquisition (loc2, src->format_file);
+
   /* TODO: allow configuring buffer count? */
-  src->sap_buffers = new SapBufferWithTrash (3, src->sap_acq);
-  src->sap_xfer =
-      new SapAcqToBuf (src->sap_acq, src->sap_buffers,
+  src->sap_buffers = new SapBufferWithTrash ();
+  src->sap_roi_buffers[0] = new SapBufferRoi (src->sap_buffers);
+  src->sap_roi_buffers[1] = new SapBufferRoi (src->sap_buffers);
+
+  src->sap_xfer[0] =
+      new SapAcqToBuf (src->sap_acq[0], src->sap_roi_buffers[0],
       gst_saperamultisrc_xfer_callback, src);
+  src->sap_xfer[1] =
+      new SapAcqToBuf (src->sap_acq[1], src->sap_roi_buffers[1],
+      gst_saperamultisrc_xfer_callback, src);
+
   // TODO: handle bayer
   //src->sap_bayer = new SapBayer(m_Acq, m_Buffers);
   src->sap_pro =
@@ -210,36 +218,67 @@ gst_saperamultisrc_init_objects (GstSaperaMultiSrc * src)
   return TRUE;
 }
 
+static gboolean
+is_scatter_gatter_supported(SapLocation loc1, SapLocation loc2)
+{
+  return TRUE
+    && SapBuffer::IsBufferTypeSupported(loc1, SapBuffer::TypeScatterGather)
+    && SapBuffer::IsBufferTypeSupported(loc2, SapBuffer::TypeScatterGather)
+    ;
+}
+
+
+static gboolean
+is_scatter_gatter_physical_supported(SapLocation loc1, SapLocation loc2)
+{
+  return TRUE
+    && !SapBuffer::IsBufferTypeSupported(loc1, SapBuffer::TypeScatterGather)
+    && !SapBuffer::IsBufferTypeSupported(loc2, SapBuffer::TypeScatterGather)
+    && SapBuffer::IsBufferTypeSupported(loc1, SapBuffer::TypeScatterGatherPhysical)
+    && SapBuffer::IsBufferTypeSupported(loc2, SapBuffer::TypeScatterGatherPhysical)
+    ;
+}
+
 gboolean
 gst_saperamultisrc_create_objects (GstSaperaMultiSrc * src)
 {
   //UINT32 video_type = 0;
 
   /* Create acquisition object */
-  if (src->sap_acq && !*src->sap_acq) {
-    if (!src->sap_acq->Create ()) {
-      GST_ERROR_OBJECT (src, "Failed to create SapAcquisition");
+  if (src->sap_acq[0] && !*src->sap_acq[0]) {
+    if (!src->sap_acq[0]->Create ()) {
+      GST_ERROR_OBJECT (src, "Failed to create SapAcquisition 1");
       gst_saperamultisrc_destroy_objects (src);
       return FALSE;
     }
   }
 
-  //if (!src->sap_acq->GetParameter (CORACQ_PRM_VIDEO, &video_type)) {
-  //  gst_saperamultisrc_destroy_objects (src);
-  //  return FALSE;
-  //}
+  if (src->sap_acq[1] && !*src->sap_acq[1]) {
+    if (!src->sap_acq[1]->Create ()) {
+      GST_ERROR_OBJECT (src, "Failed to create SapAcquisition 2");
+      gst_saperamultisrc_destroy_objects (src);
+      return FALSE;
+    }
+  }
 
-  /* TODO: handle Bayer
-     //if (videoType != CORACQ_VAL_VIDEO_BAYER)
+  int width = src->sap_acq[0]->GetXferParams().GetWidth();
+  int height = src->sap_acq[0]->GetXferParams().GetHeight();
+  SapFormat format = src->sap_acq[0]->GetXferParams().GetFormat();
 
-     // Enable/Disable bayer conversion
-     // This call may require to modify the acquisition output format.
-     // For this reason, it has to be done after creating the acquisition object but before
-     // creating the output buffer object.
-     //if( m_Bayer && !m_Bayer->Enable( m_BayerEnabled, m_BayerUseHardware))
-     //{
-     //    m_BayerEnabled= FALSE;
-     //} */
+  if (is_scatter_gatter_supported(src->sap_acq[0]->GetLocation(), src->sap_acq[1]->GetLocation())) {
+    src->sap_buffers->SetParameters(1, 2*width, height, format, SapBuffer::TypeScatterGather);
+  }
+  else if (is_scatter_gatter_physical_supported(src->sap_acq[0]->GetLocation(), src->sap_acq[1]->GetLocation())) {
+    src->sap_buffers->SetParameters(1, 2*width, height, format, SapBuffer::TypeScatterGatherPhysical);
+  }
+  else {
+    GST_ERROR_OBJECT (src, "Scatter Gatter Not Supported");
+    gst_saperamultisrc_destroy_objects (src);
+    return FALSE;
+  }
+
+  int pixel_depth = src->sap_acq[0]->GetXferParams().GetPixelDepth();
+  src->sap_buffers->SetPixelDepth(pixel_depth);
 
   // Create buffer objects
   if (src->sap_buffers && !*src->sap_buffers) {
@@ -252,23 +291,34 @@ gst_saperamultisrc_create_objects (GstSaperaMultiSrc * src)
     src->sap_buffers->Clear ();
   }
 
-  /* TODO: handle Bayer
-     // Create bayer object
-     //if (m_Bayer && !*m_Bayer && !m_Bayer->Create())
-     //{
-     //    DestroyObjects();
-     //    return FALSE;
-     //} */
+  src->sap_roi_buffers[0]->SetRoi(0, 0, width, height);
+  if (!src->sap_roi_buffers[0]->Create()) {
+    GST_ERROR_OBJECT (src, "Failed to create SapBuffer Roi 1");
+    gst_saperamultisrc_destroy_objects (src);
+    return FALSE;
+  }
+  src->sap_roi_buffers[1]->SetRoi(width, 0, width, height);
+  if (!src->sap_roi_buffers[1]->Create()) {
+    GST_ERROR_OBJECT (src, "Failed to create SapBuffer Roi 2");
+    gst_saperamultisrc_destroy_objects (src);
+    return FALSE;
+  }
 
   /* Create transfer object */
-  if (src->sap_xfer && !*src->sap_xfer) {
-    if (!src->sap_xfer->Create ()) {
-        GST_ERROR_OBJECT (src, "Failed to create SapTransfer");
+  if (src->sap_xfer[0] && !*src->sap_xfer[0]) {
+    if (!src->sap_xfer[0]->Create ()) {
+        GST_ERROR_OBJECT (src, "Failed to create SapTransfer 1");
       gst_saperamultisrc_destroy_objects (src);
       return FALSE;
     }
+  }
 
-    src->sap_xfer->SetAutoEmpty (FALSE);
+  if (src->sap_xfer[1] && !*src->sap_xfer[1]) {
+    if (!src->sap_xfer[1]->Create ()) {
+        GST_ERROR_OBJECT (src, "Failed to create SapTransfer 2");
+      gst_saperamultisrc_destroy_objects (src);
+      return FALSE;
+    }
   }
 
   /* Create processing object */
@@ -288,8 +338,11 @@ gst_saperamultisrc_create_objects (GstSaperaMultiSrc * src)
 gboolean
 gst_saperamultisrc_destroy_objects (GstSaperaMultiSrc * src)
 {
-  if (src->sap_xfer && *src->sap_xfer)
-    src->sap_xfer->Destroy ();
+  if (src->sap_xfer[0] && *src->sap_xfer[0])
+    src->sap_xfer[0]->Destroy ();
+
+  if (src->sap_xfer[1] && *src->sap_xfer[1])
+    src->sap_xfer[1]->Destroy ();
 
   if (src->sap_pro && *src->sap_pro)
     src->sap_pro->Destroy ();
@@ -297,11 +350,20 @@ gst_saperamultisrc_destroy_objects (GstSaperaMultiSrc * src)
   // TODO: handle bayer
   //if (src->sap_bayer && *src->sap_bayer) src->sap_bayer->Destroy ();
 
+  if (src->sap_roi_buffers[0] && *src->sap_roi_buffers[0])
+    src->sap_roi_buffers[0]->Destroy ();
+
+  if (src->sap_roi_buffers[1] && *src->sap_roi_buffers[1])
+    src->sap_roi_buffers[1]->Destroy ();
+
   if (src->sap_buffers && *src->sap_buffers)
     src->sap_buffers->Destroy ();
 
-  if (src->sap_acq && *src->sap_acq)
-    src->sap_acq->Destroy ();
+  if (src->sap_acq[0] && *src->sap_acq[0])
+    src->sap_acq[0]->Destroy ();
+
+  if (src->sap_acq[1] && *src->sap_acq[1])
+    src->sap_acq[1]->Destroy ();
 
   return TRUE;
 }
@@ -427,9 +489,21 @@ gst_saperamultisrc_reset (GstSaperaMultiSrc * src)
 
   gst_saperamultisrc_destroy_objects (src);
 
-  if (src->sap_acq) {
-    delete src->sap_acq;
-    src->sap_acq = NULL;
+  if (src->sap_acq[0]) {
+    delete src->sap_acq[0];
+    src->sap_acq[0] = NULL;
+  }
+  if (src->sap_acq[1]) {
+    delete src->sap_acq[1];
+    src->sap_acq[1] = NULL;
+  }
+  if (src->sap_roi_buffers[0]) {
+    delete src->sap_roi_buffers[0];
+    src->sap_roi_buffers[0] = NULL;
+  }
+  if (src->sap_roi_buffers[1]) {
+    delete src->sap_roi_buffers[1];
+    src->sap_roi_buffers[1] = NULL;
   }
   if (src->sap_buffers) {
     delete src->sap_buffers;
@@ -439,9 +513,13 @@ gst_saperamultisrc_reset (GstSaperaMultiSrc * src)
     delete src->sap_bayer;
     src->sap_bayer = NULL;
   }
-  if (src->sap_xfer) {
-    delete src->sap_xfer;
-    src->sap_xfer = NULL;
+  if (src->sap_xfer[0]) {
+    delete src->sap_xfer[0];
+    src->sap_xfer[0] = NULL;
+  }
+  if (src->sap_xfer[1]) {
+    delete src->sap_xfer[1];
+    src->sap_xfer[1] = NULL;
   }
   if (src->sap_pro) {
     delete src->sap_pro;
@@ -468,10 +546,14 @@ gst_saperamultisrc_init (GstSaperaMultiSrc * src)
   src->caps = NULL;
   src->buffer = NULL;
 
-  src->sap_acq = NULL;
+  src->sap_acq[0] = NULL;
+  src->sap_acq[1] = NULL;
+  src->sap_roi_buffers[0] = NULL;
+  src->sap_roi_buffers[1] = NULL;
   src->sap_buffers = NULL;
   src->sap_bayer = NULL;
-  src->sap_xfer = NULL;
+  src->sap_xfer[0] = NULL;
+  src->sap_xfer[1] = NULL;
   src->sap_pro = NULL;
 
   gst_saperamultisrc_reset (src);
@@ -644,8 +726,12 @@ gst_saperamultisrc_start (GstBaseSrc * bsrc)
   src->height = vinfo.height;
   src->gst_stride = GST_VIDEO_INFO_COMP_STRIDE (&vinfo, 0);
 
-  if (!src->sap_xfer->Grab ()) {
-    GST_ELEMENT_ERROR (src, RESOURCE, FAILED, ("Failed to start grab"), (NULL));
+  if (!src->sap_xfer[0]->Grab ()) {
+    GST_ELEMENT_ERROR (src, RESOURCE, FAILED, ("Failed to start grab transfer 1"), (NULL));
+    return FALSE;
+  }
+  if (!src->sap_xfer[1]->Grab ()) {
+    GST_ELEMENT_ERROR (src, RESOURCE, FAILED, ("Failed to start grab transfer 2"), (NULL));
     return FALSE;
   }
 
@@ -659,14 +745,25 @@ gst_saperamultisrc_stop (GstBaseSrc * bsrc)
 
   GST_DEBUG_OBJECT (src, "stop");
 
-  if (!src->sap_xfer->Freeze ()) {
-    GST_ERROR_OBJECT (src, "Failed to stop camera acquisition");
+  if (!src->sap_xfer[0]->Freeze ()) {
+    GST_ERROR_OBJECT (src, "Failed to stop camera acquisition 1");
     return FALSE;
   }
 
-  if (!src->sap_xfer->Wait (250)) {
-    GST_ERROR_OBJECT (src, "Acquisition failed to stop camera, aborting");
-    src->sap_xfer->Abort ();
+  if (!src->sap_xfer[1]->Freeze ()) {
+    GST_ERROR_OBJECT (src, "Failed to stop camera acquisition 2");
+    return FALSE;
+  }
+
+  if (!src->sap_xfer[0]->Wait (250)) {
+    GST_ERROR_OBJECT (src, "Acquisition 1 failed to stop camera, aborting");
+    src->sap_xfer[0]->Abort ();
+    return FALSE;
+  }
+
+  if (!src->sap_xfer[1]->Wait (250)) {
+    GST_ERROR_OBJECT (src, "Acquisition 2 failed to stop camera, aborting");
+    src->sap_xfer[1]->Abort ();
     return FALSE;
   }
 
@@ -681,7 +778,7 @@ gst_saperamultisrc_get_caps (GstBaseSrc * bsrc, GstCaps * filter)
   GstSaperaMultiSrc *src = GST_SAPERA_MULTI_SRC (bsrc);
   GstCaps *caps;
 
-  if (src->sap_acq && *src->sap_acq) {
+  if (src->sap_acq[0] && *src->sap_acq[0]) {
     caps = gst_caps_copy (src->caps);
   } else {
     caps = gst_pad_get_pad_template_caps (GST_BASE_SRC_PAD (src));
