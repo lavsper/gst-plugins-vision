@@ -169,32 +169,53 @@ gst_saperamultisrc_init_objects (GstSaperaMultiSrc * src)
   server_count = SapManager::GetServerCount ();
   GST_DEBUG_OBJECT (src, "There are %d servers available", server_count);
 
-  if (src->server_index > server_count ||
-      !SapManager::GetServerName (src->server_index, name)) {
-    GST_ERROR_OBJECT (src, "Invalid server index %d", src->server_index);
+  if (src->server_index_1 > server_count ||
+      !SapManager::GetServerName (src->server_index_1, name)) {
+    GST_ERROR_OBJECT (src, "Invalid server index %d", src->server_index_1);
+    return FALSE;
+  }
+
+  if (src->server_index_2 > server_count ||
+      !SapManager::GetServerName (src->server_index_2, name)) {
+    GST_ERROR_OBJECT (src, "Invalid server index %d", src->server_index_2);
     return FALSE;
   }
 
   GST_DEBUG_OBJECT (src, "Trying to open server index %d ('%s')",
-      src->server_index, name);
+      src->server_index_1, name);
 
-  resource_count = SapManager::GetResourceCount (src->server_index,
+  resource_count = SapManager::GetResourceCount (src->server_index_1,
       SapManager::ResourceAcq);
   GST_DEBUG_OBJECT (src, "Resource count: %d", resource_count);
 
   if (src->resource_index > resource_count ||
-      !SapManager::GetResourceName (src->server_index, SapManager::ResourceAcq,
+      !SapManager::GetResourceName (src->server_index_1, SapManager::ResourceAcq,
           src->resource_index, name, 128)) {
     GST_ERROR_OBJECT (src, "Invalid resource index %d", src->resource_index);
     return FALSE;
   }
+
+  GST_DEBUG_OBJECT (src, "Trying to open server index %d ('%s')",
+      src->server_index_2, name);
+
+  resource_count = SapManager::GetResourceCount (src->server_index_2,
+      SapManager::ResourceAcq);
+  GST_DEBUG_OBJECT (src, "Resource count: %d", resource_count);
+
+  if (src->resource_index > resource_count ||
+      !SapManager::GetResourceName (src->server_index_2, SapManager::ResourceAcq,
+          src->resource_index, name, 128)) {
+    GST_ERROR_OBJECT (src, "Invalid resource index %d", src->resource_index);
+    return FALSE;
+  }
+
   GST_DEBUG_OBJECT (src, "Trying to open resource index %d ('%s')",
       src->resource_index, name);
 
   GST_DEBUG_OBJECT (src, "Using config file '%s'", src->format_file);
 
-  SapLocation loc (src->server_index, src->resource_index);
-  SapLocation loc2 (src->server_index + 1, src->resource_index);
+  SapLocation loc (src->server_index_1, src->resource_index);
+  SapLocation loc2 (src->server_index_2, src->resource_index);
   src->sap_acq[0] = new SapAcquisition (loc, src->format_file);
   src->sap_acq[1] = new SapAcquisition (loc2, src->format_file);
 
@@ -390,14 +411,16 @@ enum
   PROP_0,
   PROP_FORMAT_FILE,
   PROP_NUM_CAPTURE_BUFFERS,
-  PROP_SERVER_INDEX,
+  PROP_SERVER_INDEX_1,
+  PROP_SERVER_INDEX_2,
   PROP_RESOURCE_INDEX,
   PROP_CHANNEL_EXTRACT
 };
 
 #define DEFAULT_PROP_FORMAT_FILE ""
 #define DEFAULT_PROP_NUM_CAPTURE_BUFFERS 2
-#define DEFAULT_PROP_SERVER_INDEX 1
+#define DEFAULT_PROP_SERVER_INDEX_1 1
+#define DEFAULT_PROP_SERVER_INDEX_2 2
 #define DEFAULT_PROP_RESOURCE_INDEX 0
 #define DEFAULT_PROP_CHANNEL_EXTRACT 0
 
@@ -455,10 +478,15 @@ gst_saperamultisrc_class_init (GstSaperaMultiSrcClass * klass)
           "Number of capture buffers", 1, G_MAXUINT,
           DEFAULT_PROP_NUM_CAPTURE_BUFFERS,
           (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
-  g_object_class_install_property (gobject_class, PROP_SERVER_INDEX,
-      g_param_spec_int ("server-index", "Server index",
-          "Server (frame grabber card) index", 0, G_MAXINT,
-          DEFAULT_PROP_SERVER_INDEX,
+  g_object_class_install_property (gobject_class, PROP_SERVER_INDEX_1,
+      g_param_spec_int ("server-index-1", "Server 1 index",
+          "Server (frame grabber first card) index", 0, G_MAXINT,
+          DEFAULT_PROP_SERVER_INDEX_1,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+  g_object_class_install_property (gobject_class, PROP_SERVER_INDEX_2,
+      g_param_spec_int ("server-index-2", "Server 2 index",
+          "Server (frame grabber second card) index", 0, G_MAXINT,
+          DEFAULT_PROP_SERVER_INDEX_2,
           (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
   g_object_class_install_property (gobject_class, PROP_RESOURCE_INDEX,
       g_param_spec_int ("resource-index", "Resource index",
@@ -581,8 +609,11 @@ gst_saperamultisrc_set_property (GObject * object, guint property_id,
         src->num_capture_buffers = g_value_get_uint (value);
       }
       break;
-    case PROP_SERVER_INDEX:
-      src->server_index = g_value_get_int (value);
+    case PROP_SERVER_INDEX_1:
+      src->server_index_1 = g_value_get_int (value);
+      break;
+    case PROP_SERVER_INDEX_2:
+      src->server_index_2 = g_value_get_int (value);
       break;
     case PROP_RESOURCE_INDEX:
       src->resource_index = g_value_get_int (value);
@@ -612,8 +643,11 @@ gst_saperamultisrc_get_property (GObject * object, guint property_id,
     case PROP_NUM_CAPTURE_BUFFERS:
       g_value_set_uint (value, src->num_capture_buffers);
       break;
-    case PROP_SERVER_INDEX:
-      g_value_set_int (value, src->server_index);
+    case PROP_SERVER_INDEX_1:
+      g_value_set_int (value, src->server_index_1);
+      break;
+    case PROP_SERVER_INDEX_2:
+      g_value_set_int (value, src->server_index_2);
       break;
     case PROP_RESOURCE_INDEX:
       g_value_set_int (value, src->resource_index);

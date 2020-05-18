@@ -39,7 +39,8 @@ struct _GstSaperaMultiSrc
   /* properties */
   gchar *format_file;
   guint num_capture_buffers;
-  gint server_index;
+  gint server_index_1;
+  gint server_index_2;
   gint resource_index;
   gint channel_extract;
 
