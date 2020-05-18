@@ -1,8 +1,11 @@
 set (SOURCES
-  gstsaperasrc.cpp)
-    
+  gstsapera.cpp
+  gstsaperasrc.cpp
+  gstsaperamultisrc.cpp)
+
 set (HEADERS
-  gstsaperasrc.h)
+  gstsaperasrc.h
+  gstsaperamultisrc.h)
 
 include_directories (AFTER
   ${SAPERA_INCLUDE_DIR})

@@ -1,30 +1,14 @@
-/* GStreamer
- * Copyright (C) 2011 FIXME <fixme@example.com>
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
- *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Suite 500,
- * Boston, MA 02110-1335, USA.
- */
+#include "gstsaperamultisrc.h"
+
 /**
- * SECTION:element-gstsaperasrc
+ * SECTION:element-gstsaperamultisrc
  *
- * The saperasrc element is a source for Teledyne DALSA Sapera framegrabbers.
+ * The saperamultisrc element is a source for Teledyne DALSA Sapera framegrabbers.
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch -v saperasrc ! ffmpegcolorspace ! autovideosink
+ * gst-launch -v saperamultisrc ! ffmpegcolorspace ! autovideosink
  * ]|
  * Shows video from the default DALSA framegrabber
  * </refsect2>
@@ -36,23 +20,23 @@
 
 #include <gst/video/video.h>
 
-#include "gstsaperasrc.h"
+#include "gstsaperamultisrc.h"
 
 
-gboolean gst_saperasrc_create_objects (GstSaperaSrc * src);
-gboolean gst_saperasrc_destroy_objects (GstSaperaSrc * src);
+gboolean gst_saperamultisrc_create_objects (GstSaperaMultiSrc * src);
+gboolean gst_saperamultisrc_destroy_objects (GstSaperaMultiSrc * src);
 
-class SapGstProcessing:public SapProcessing
+class SapGstMultiProcessing:public SapProcessing
 {
 public:
-  SapGstProcessing (SapBuffer * pBuffers, SapProCallback pCallback,
+  SapGstMultiProcessing (SapBuffer * pBuffers, SapProCallback pCallback,
       void *pContext)
   : SapProcessing (pBuffers, pCallback, pContext)
   {
-    src = (GstSaperaSrc *) pContext;
+    src = (GstSaperaMultiSrc *) pContext;
   }
 
-  virtual ~ SapGstProcessing ()
+  virtual ~ SapGstMultiProcessing ()
   {
     if (m_bInitOK)
       Destroy ();
@@ -154,13 +138,13 @@ protected:
   }
 
 protected:
-  GstSaperaSrc * src;
+  GstSaperaMultiSrc * src;
 };
 
 void
-gst_saperasrc_xfer_callback (SapXferCallbackInfo * pInfo)
+gst_saperamultisrc_xfer_callback (SapXferCallbackInfo * pInfo)
 {
-  GstSaperaSrc *src = (GstSaperaSrc *) pInfo->GetContext ();
+  GstSaperaMultiSrc *src = (GstSaperaMultiSrc *) pInfo->GetContext ();
 
   if (pInfo->IsTrash ()) {
     /* TODO: update dropped buffer count */
@@ -171,15 +155,15 @@ gst_saperasrc_xfer_callback (SapXferCallbackInfo * pInfo)
 }
 
 void
-gst_saperasrc_pro_callback (SapProCallbackInfo * pInfo)
+gst_saperamultisrc_pro_callback (SapProCallbackInfo * pInfo)
 {
-  /* GstSaperaSrc *src = (GstSaperaSrc *) pInfo->GetContext (); */
+  /* GstSaperaMultiSrc *src = (GstSaperaMultiSrc *) pInfo->GetContext (); */
 
   /* TODO: handle buffer */
 }
 
 gboolean
-gst_saperasrc_init_objects (GstSaperaSrc * src)
+gst_saperamultisrc_init_objects (GstSaperaMultiSrc * src)
 {
   char name[128];
   int server_count, resource_count;
@@ -217,17 +201,17 @@ gst_saperasrc_init_objects (GstSaperaSrc * src)
   src->sap_buffers = new SapBufferWithTrash (3, src->sap_acq);
   src->sap_xfer =
       new SapAcqToBuf (src->sap_acq, src->sap_buffers,
-      gst_saperasrc_xfer_callback, src);
+      gst_saperamultisrc_xfer_callback, src);
   // TODO: handle bayer
   //src->sap_bayer = new SapBayer(m_Acq, m_Buffers);
   src->sap_pro =
-      new SapGstProcessing (src->sap_buffers, gst_saperasrc_pro_callback, src);
+      new SapGstMultiProcessing (src->sap_buffers, gst_saperamultisrc_pro_callback, src);
 
   return TRUE;
 }
 
 gboolean
-gst_saperasrc_create_objects (GstSaperaSrc * src)
+gst_saperamultisrc_create_objects (GstSaperaMultiSrc * src)
 {
   //UINT32 video_type = 0;
 
@@ -235,13 +219,13 @@ gst_saperasrc_create_objects (GstSaperaSrc * src)
   if (src->sap_acq && !*src->sap_acq) {
     if (!src->sap_acq->Create ()) {
       GST_ERROR_OBJECT (src, "Failed to create SapAcquisition");
-      gst_saperasrc_destroy_objects (src);
+      gst_saperamultisrc_destroy_objects (src);
       return FALSE;
     }
   }
 
   //if (!src->sap_acq->GetParameter (CORACQ_PRM_VIDEO, &video_type)) {
-  //  gst_saperasrc_destroy_objects (src);
+  //  gst_saperamultisrc_destroy_objects (src);
   //  return FALSE;
   //}
 
@@ -261,7 +245,7 @@ gst_saperasrc_create_objects (GstSaperaSrc * src)
   if (src->sap_buffers && !*src->sap_buffers) {
     if (!src->sap_buffers->Create ()) {
       GST_ERROR_OBJECT (src, "Failed to create SapBuffer");
-      gst_saperasrc_destroy_objects (src);
+      gst_saperamultisrc_destroy_objects (src);
       return FALSE;
     }
     // Clear all buffers
@@ -280,7 +264,7 @@ gst_saperasrc_create_objects (GstSaperaSrc * src)
   if (src->sap_xfer && !*src->sap_xfer) {
     if (!src->sap_xfer->Create ()) {
         GST_ERROR_OBJECT (src, "Failed to create SapTransfer");
-      gst_saperasrc_destroy_objects (src);
+      gst_saperamultisrc_destroy_objects (src);
       return FALSE;
     }
 
@@ -291,7 +275,7 @@ gst_saperasrc_create_objects (GstSaperaSrc * src)
   if (src->sap_pro && !*src->sap_pro) {
     if (!src->sap_pro->Create ()) {
         GST_ERROR_OBJECT (src, "Failed to create SapProcessing");
-      gst_saperasrc_destroy_objects (src);
+      gst_saperamultisrc_destroy_objects (src);
       return FALSE;
     }
 
@@ -302,7 +286,7 @@ gst_saperasrc_create_objects (GstSaperaSrc * src)
 }
 
 gboolean
-gst_saperasrc_destroy_objects (GstSaperaSrc * src)
+gst_saperamultisrc_destroy_objects (GstSaperaMultiSrc * src)
 {
   if (src->sap_xfer && *src->sap_xfer)
     src->sap_xfer->Destroy ();
@@ -323,21 +307,21 @@ gst_saperasrc_destroy_objects (GstSaperaSrc * src)
 }
 
 /* prototypes */
-static void gst_saperasrc_set_property (GObject * object,
+static void gst_saperamultisrc_set_property (GObject * object,
     guint property_id, const GValue * value, GParamSpec * pspec);
-static void gst_saperasrc_get_property (GObject * object,
+static void gst_saperamultisrc_get_property (GObject * object,
     guint property_id, GValue * value, GParamSpec * pspec);
-static void gst_saperasrc_dispose (GObject * object);
-static void gst_saperasrc_finalize (GObject * object);
+static void gst_saperamultisrc_dispose (GObject * object);
+static void gst_saperamultisrc_finalize (GObject * object);
 
-static gboolean gst_saperasrc_start (GstBaseSrc * src);
-static gboolean gst_saperasrc_stop (GstBaseSrc * src);
-static GstCaps *gst_saperasrc_get_caps (GstBaseSrc * src, GstCaps * filter);
-static gboolean gst_saperasrc_set_caps (GstBaseSrc * src, GstCaps * caps);
+static gboolean gst_saperamultisrc_start (GstBaseSrc * src);
+static gboolean gst_saperamultisrc_stop (GstBaseSrc * src);
+static GstCaps *gst_saperamultisrc_get_caps (GstBaseSrc * src, GstCaps * filter);
+static gboolean gst_saperamultisrc_set_caps (GstBaseSrc * src, GstCaps * caps);
 
-static GstFlowReturn gst_saperasrc_create (GstPushSrc * src, GstBuffer ** buf);
+static GstFlowReturn gst_saperamultisrc_create (GstPushSrc * src, GstBuffer ** buf);
 
-static GstCaps *gst_saperasrc_create_caps (GstSaperaSrc * src);
+static GstCaps *gst_saperamultisrc_create_caps (GstSaperaMultiSrc * src);
 
 enum
 {
@@ -357,7 +341,7 @@ enum
 
 /* pad templates */
 
-static GstStaticPadTemplate gst_saperasrc_src_template =
+static GstStaticPadTemplate gst_saperamultisrc_src_template =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
@@ -367,35 +351,35 @@ GST_STATIC_PAD_TEMPLATE ("src",
 
 /* class initialization */
 
-G_DEFINE_TYPE (GstSaperaSrc, gst_saperasrc, GST_TYPE_PUSH_SRC);
+G_DEFINE_TYPE (GstSaperaMultiSrc, gst_saperamultisrc, GST_TYPE_PUSH_SRC);
 
 static void
-gst_saperasrc_class_init (GstSaperaSrcClass * klass)
+gst_saperamultisrc_class_init (GstSaperaMultiSrcClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *gstelement_class = GST_ELEMENT_CLASS (klass);
   GstBaseSrcClass *gstbasesrc_class = GST_BASE_SRC_CLASS (klass);
   GstPushSrcClass *gstpushsrc_class = GST_PUSH_SRC_CLASS (klass);
 
-  gobject_class->set_property = gst_saperasrc_set_property;
-  gobject_class->get_property = gst_saperasrc_get_property;
-  gobject_class->dispose = gst_saperasrc_dispose;
-  gobject_class->finalize = gst_saperasrc_finalize;
+  gobject_class->set_property = gst_saperamultisrc_set_property;
+  gobject_class->get_property = gst_saperamultisrc_get_property;
+  gobject_class->dispose = gst_saperamultisrc_dispose;
+  gobject_class->finalize = gst_saperamultisrc_finalize;
 
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&gst_saperasrc_src_template));
+      gst_static_pad_template_get (&gst_saperamultisrc_src_template));
 
   gst_element_class_set_static_metadata (gstelement_class,
       "Teledyne DALSA Sapera Video Source", "Source/Video",
       "Teledyne DALSA Sapera framegrabber video source",
       "Joshua M. Doe <oss@nvl.army.mil>");
 
-  gstbasesrc_class->start = GST_DEBUG_FUNCPTR (gst_saperasrc_start);
-  gstbasesrc_class->stop = GST_DEBUG_FUNCPTR (gst_saperasrc_stop);
-  gstbasesrc_class->get_caps = GST_DEBUG_FUNCPTR (gst_saperasrc_get_caps);
-  gstbasesrc_class->set_caps = GST_DEBUG_FUNCPTR (gst_saperasrc_set_caps);
+  gstbasesrc_class->start = GST_DEBUG_FUNCPTR (gst_saperamultisrc_start);
+  gstbasesrc_class->stop = GST_DEBUG_FUNCPTR (gst_saperamultisrc_stop);
+  gstbasesrc_class->get_caps = GST_DEBUG_FUNCPTR (gst_saperamultisrc_get_caps);
+  gstbasesrc_class->set_caps = GST_DEBUG_FUNCPTR (gst_saperamultisrc_set_caps);
 
-  gstpushsrc_class->create = GST_DEBUG_FUNCPTR (gst_saperasrc_create);
+  gstpushsrc_class->create = GST_DEBUG_FUNCPTR (gst_saperamultisrc_create);
 
   /* Install GObject properties */
   g_object_class_install_property (gobject_class, PROP_FORMAT_FILE,
@@ -426,7 +410,7 @@ gst_saperasrc_class_init (GstSaperaSrcClass * klass)
 }
 
 static void
-gst_saperasrc_reset (GstSaperaSrc * src)
+gst_saperamultisrc_reset (GstSaperaMultiSrc * src)
 {
   src->dropped_frame_count = 0;
   src->last_buffer_number = 0;
@@ -441,7 +425,7 @@ gst_saperasrc_reset (GstSaperaSrc * src)
     src->buffer = NULL;
   }
 
-  gst_saperasrc_destroy_objects (src);
+  gst_saperamultisrc_destroy_objects (src);
 
   if (src->sap_acq) {
     delete src->sap_acq;
@@ -466,7 +450,7 @@ gst_saperasrc_reset (GstSaperaSrc * src)
 }
 
 static void
-gst_saperasrc_init (GstSaperaSrc * src)
+gst_saperamultisrc_init (GstSaperaMultiSrc * src)
 {
   /* set source as live (no preroll) */
   gst_base_src_set_live (GST_BASE_SRC (src), TRUE);
@@ -490,16 +474,16 @@ gst_saperasrc_init (GstSaperaSrc * src)
   src->sap_xfer = NULL;
   src->sap_pro = NULL;
 
-  gst_saperasrc_reset (src);
+  gst_saperamultisrc_reset (src);
 }
 
 void
-gst_saperasrc_set_property (GObject * object, guint property_id,
+gst_saperamultisrc_set_property (GObject * object, guint property_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstSaperaSrc *src;
+  GstSaperaMultiSrc *src;
 
-  src = GST_SAPERA_SRC (object);
+  src = GST_SAPERA_MULTI_SRC (object);
 
   switch (property_id) {
     case PROP_FORMAT_FILE:
@@ -531,13 +515,13 @@ gst_saperasrc_set_property (GObject * object, guint property_id,
 }
 
 void
-gst_saperasrc_get_property (GObject * object, guint property_id,
+gst_saperamultisrc_get_property (GObject * object, guint property_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstSaperaSrc *src;
+  GstSaperaMultiSrc *src;
 
-  g_return_if_fail (GST_IS_SAPERA_SRC (object));
-  src = GST_SAPERA_SRC (object);
+  g_return_if_fail (GST_IS_SAPERA_MULTI_SRC (object));
+  src = GST_SAPERA_MULTI_SRC (object);
 
   switch (property_id) {
     case PROP_FORMAT_FILE:
@@ -562,20 +546,20 @@ gst_saperasrc_get_property (GObject * object, guint property_id,
 }
 
 void
-gst_saperasrc_dispose (GObject * object)
+gst_saperamultisrc_dispose (GObject * object)
 {
   /* clean up as possible.  may be called multiple times */
 
-  G_OBJECT_CLASS (gst_saperasrc_parent_class)->dispose (object);
+  G_OBJECT_CLASS (gst_saperamultisrc_parent_class)->dispose (object);
 }
 
 void
-gst_saperasrc_finalize (GObject * object)
+gst_saperamultisrc_finalize (GObject * object)
 {
-  GstSaperaSrc *src;
+  GstSaperaMultiSrc *src;
 
-  g_return_if_fail (GST_IS_SAPERA_SRC (object));
-  src = GST_SAPERA_SRC (object);
+  g_return_if_fail (GST_IS_SAPERA_MULTI_SRC (object));
+  src = GST_SAPERA_MULTI_SRC (object);
 
   /* clean up object here */
   g_free (src->format_file);
@@ -590,13 +574,13 @@ gst_saperasrc_finalize (GObject * object)
     src->buffer = NULL;
   }
 
-  G_OBJECT_CLASS (gst_saperasrc_parent_class)->finalize (object);
+  G_OBJECT_CLASS (gst_saperamultisrc_parent_class)->finalize (object);
 }
 
 static gboolean
-gst_saperasrc_start (GstBaseSrc * bsrc)
+gst_saperamultisrc_start (GstBaseSrc * bsrc)
 {
-  GstSaperaSrc *src = GST_SAPERA_SRC (bsrc);
+  GstSaperaMultiSrc *src = GST_SAPERA_MULTI_SRC (bsrc);
   GstVideoInfo vinfo;
   SapFormat sap_format;
   GstVideoFormat gst_format;
@@ -616,7 +600,7 @@ gst_saperasrc_start (GstBaseSrc * bsrc)
   }
 
   GST_DEBUG_OBJECT (src, "About to initialize and create Sapera objects");
-  if (!gst_saperasrc_init_objects (src) || !gst_saperasrc_create_objects (src)) {
+  if (!gst_saperamultisrc_init_objects (src) || !gst_saperamultisrc_create_objects (src)) {
     GST_ELEMENT_ERROR (src, RESOURCE, FAILED,
         ("Failed to create Sapera objects"), (NULL));
     return FALSE;
@@ -669,9 +653,9 @@ gst_saperasrc_start (GstBaseSrc * bsrc)
 }
 
 static gboolean
-gst_saperasrc_stop (GstBaseSrc * bsrc)
+gst_saperamultisrc_stop (GstBaseSrc * bsrc)
 {
-  GstSaperaSrc *src = GST_SAPERA_SRC (bsrc);
+  GstSaperaMultiSrc *src = GST_SAPERA_MULTI_SRC (bsrc);
 
   GST_DEBUG_OBJECT (src, "stop");
 
@@ -686,15 +670,15 @@ gst_saperasrc_stop (GstBaseSrc * bsrc)
     return FALSE;
   }
 
-  gst_saperasrc_reset (src);
+  gst_saperamultisrc_reset (src);
 
   return TRUE;
 }
 
 static GstCaps *
-gst_saperasrc_get_caps (GstBaseSrc * bsrc, GstCaps * filter)
+gst_saperamultisrc_get_caps (GstBaseSrc * bsrc, GstCaps * filter)
 {
-  GstSaperaSrc *src = GST_SAPERA_SRC (bsrc);
+  GstSaperaMultiSrc *src = GST_SAPERA_MULTI_SRC (bsrc);
   GstCaps *caps;
 
   if (src->sap_acq && *src->sap_acq) {
@@ -718,9 +702,9 @@ gst_saperasrc_get_caps (GstBaseSrc * bsrc, GstCaps * filter)
 }
 
 static gboolean
-gst_saperasrc_set_caps (GstBaseSrc * bsrc, GstCaps * caps)
+gst_saperamultisrc_set_caps (GstBaseSrc * bsrc, GstCaps * caps)
 {
-  GstSaperaSrc *src = GST_SAPERA_SRC (bsrc);
+  GstSaperaMultiSrc *src = GST_SAPERA_MULTI_SRC (bsrc);
   GstVideoInfo vinfo;
 
   GST_DEBUG_OBJECT (src, "The caps being set are %" GST_PTR_FORMAT, caps);
@@ -741,9 +725,9 @@ unsupported_caps:
 }
 
 static GstFlowReturn
-gst_saperasrc_create (GstPushSrc * psrc, GstBuffer ** buf)
+gst_saperamultisrc_create (GstPushSrc * psrc, GstBuffer ** buf)
 {
-  GstSaperaSrc *src = GST_SAPERA_SRC (psrc);
+  GstSaperaMultiSrc *src = GST_SAPERA_MULTI_SRC (psrc);
 
   g_mutex_lock (&src->buffer_mutex);
   while (src->buffer == NULL)
@@ -752,7 +736,7 @@ gst_saperasrc_create (GstPushSrc * psrc, GstBuffer ** buf)
   src->buffer = NULL;
   g_mutex_unlock (&src->buffer_mutex);
 
-  GST_DEBUG ("saperasrc_create => pts %" GST_TIME_FORMAT " duration %"
+  GST_DEBUG ("saperamultisrc_create => pts %" GST_TIME_FORMAT " duration %"
       GST_TIME_FORMAT, GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (*buf)),
       GST_TIME_ARGS (GST_BUFFER_DURATION (*buf)));
 

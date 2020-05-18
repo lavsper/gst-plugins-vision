@@ -36,7 +36,7 @@ G_BEGIN_DECLS
 typedef struct _GstSaperaSrc GstSaperaSrc;
 typedef struct _GstSaperaSrcClass GstSaperaSrcClass;
 
-class SapMyProcessing;
+class SapGstProcessing;
 
 struct _GstSaperaSrc
 {
@@ -51,7 +51,7 @@ struct _GstSaperaSrc
   SapBuffer      *sap_buffers;
   SapBayer       *sap_bayer;
   SapTransfer    *sap_xfer;
-  SapMyProcessing*sap_pro;
+  SapGstProcessing*sap_pro;
 
   /* properties */
   gchar *format_file;
